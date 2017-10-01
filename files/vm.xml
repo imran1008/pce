@@ -1,0 +1,86 @@
+<domain type='kvm'>
+  <name>{{name}}</name>
+  <title>{{title}}</title>
+  <description>{{name}}</description>
+  <memory unit='MiB'>{{maxMemory}}</memory>
+  <currentMemory unit='MiB'>{{baseMemory}}</currentMemory>
+  <vcpu placement='static'>{{cpuCount}}</vcpu>
+  <os>
+    <type arch='x86_64' machine='pc-i440fx-2.7'>hvm</type>
+  </os>
+  <features>
+    <acpi/>
+    <apic/>
+    <vmport state='off'/>
+  </features>
+  <clock offset='utc'>
+    <timer name='rtc' tickpolicy='catchup'/>
+    <timer name='pit' tickpolicy='delay'/>
+    <timer name='hpet' present='no'/>
+  </clock>
+  <on_poweroff>destroy</on_poweroff>
+  <on_reboot>restart</on_reboot>
+  <on_crash>restart</on_crash>
+  <pm>
+    <suspend-to-mem enabled='no'/>
+    <suspend-to-disk enabled='no'/>
+  </pm>
+  <devices>
+    <emulator>/usr/sbin/qemu-system-x86_64</emulator>
+{%- for disk in disks %}
+{%- set dev = '%c' % (loop.index + 96) %}
+{%- set unit = loop.index-1 %}
+    <disk type='block' device='{{disk.type}}'>
+      <driver name='qemu' type='raw' cache='none' io='native'/>
+      <source dev='/dev/mapper/{{disk.uuid}}'/>
+      <target dev='sd{{dev}}' bus='scsi'/>
+{%- if disk.bootOrder != None %}
+      <boot order='{{disk.bootOrder+1}}'/>
+{%- endif %}
+      <address type='drive' controller='0' bus='0' target='0' unit='{{unit}}'/>
+    </disk>
+{%- endfor %}
+    <video>
+      <model type='virtio' heads='1' primary='yes'/>
+      <address type='pci' domain='0x0000' bus='0x00' slot='0x02' function='0x0'/>
+    </video>
+    <controller type='pci' index='0' model='pci-root'/>
+    <controller type='usb' index='0' model='ich9-ehci1'>
+      <address type='pci' domain='0x0000' bus='0x00' slot='0x03' function='0x7'/>
+    </controller>
+    <controller type='usb' index='0' model='ich9-uhci1'>
+      <master startport='0'/>
+      <address type='pci' domain='0x0000' bus='0x00' slot='0x03' function='0x0' multifunction='on'/>
+    </controller>
+    <controller type='usb' index='0' model='ich9-uhci2'>
+      <master startport='2'/>
+      <address type='pci' domain='0x0000' bus='0x00' slot='0x03' function='0x1'/>
+    </controller>
+    <controller type='usb' index='0' model='ich9-uhci3'>
+      <master startport='4'/>
+      <address type='pci' domain='0x0000' bus='0x00' slot='0x03' function='0x2'/>
+    </controller>
+    <memballoon model='virtio'>
+      <address type='pci' domain='0x0000' bus='0x00' slot='0x04' function='0x0'/>
+    </memballoon>
+    <controller type='scsi' index='0' model='virtio-scsi'>
+      <address type='pci' domain='0x0000' bus='0x00' slot='0x05' function='0x0'/>
+    </controller>
+{%- for network in networks %}
+    <interface type='bridge'>
+      {%- if network.mac != None %}
+      <mac address='{{network.mac}}'/>
+      {%- endif %}
+      <source bridge='{{network.iface}}'/>
+      <model type='virtio'/>
+      <address type='pci' domain='0x0000' bus='0x00' slot='0x{{"%02x" % (loop.index+5)}}' function='0x0'/>
+    </interface>
+{%- endfor %}
+    <input type='mouse' bus='ps2'/>
+    <input type='keyboard' bus='ps2'/>
+    <graphics type='spice' autoport='yes'>
+      <listen type='address'/>
+    </graphics>
+  </devices>
+</domain>
+
