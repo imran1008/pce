@@ -25,14 +25,14 @@ The storage machines will provide virtual block storage for virtual machines.
 ### Minimum hardware requirements
  - One network interface for management
  - Few network interfaces for iSCSI traffic
- - At least 4 hard drives in btrfs RAID-10 configuration
+ - At least 4 hard drives in Btrfs RAID-10 configuration
 
 ### Software requirements
  - GNU/Linux
  - Python 3
  - Saltstack
  - TargetCLI
- - btrfs
+ - BTRFS
 
 ## Compute machines
 The compute machines will provide a host for running virtual machines. The
@@ -43,7 +43,7 @@ for the virtual machines.
  - One network interface with VLAN support
  - Few network interfaces for iSCSI traffic
  - Plenty of RAM
- - Plenty of CPU cores with VT-x enabled
+ - Plenty of x86-64 CPU cores with virtualization enabled
 
 ### Software requirements
  - GNU/Linux
@@ -53,4 +53,9 @@ for the virtual machines.
  - libvirt
  - KVM
  - MultiPath
+
+## Network switch
+The following is a list of requirements for the network switch
+ - Support VLAN
+ - Support Jumbo frames (this is not a hard requirement but jumbo frames greatly improve iSCSI performance)
 
