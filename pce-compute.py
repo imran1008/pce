@@ -9,8 +9,9 @@ import subprocess
 import sys
 import tempfile
 
-uuid_re = re.compile('(.*):\n    ([a-zA-Z0-9]+) dm-\d+ LIO-ORG,(.*)$')
-guest_re = re.compile('^     [^ ]+\s+([^ ]+)\s+(.*)$')
+g_uuid_re = re.compile('(.*):\n    ([a-zA-Z0-9]+) dm-\d+ LIO-ORG,(.*)$')
+g_guest_re = re.compile('^     [^ ]+\s+([^ ]+)\s+(.*)$')
+g_config = None
 
 def execute_cmd(hostname, argv):
     subprocess.call(['salt', hostname, 'cmd.run', ' '.join(argv)])
@@ -47,7 +48,7 @@ def getDiskId(hostname, label):
     assert len(stdout) == 2, "Invalid response from Popen"
 
     output = stdout[0].decode('utf-8')
-    uuidMatch = uuid_re.match(output)
+    uuidMatch = g_uuid_re.match(output)
     assert uuidMatch != None, "Disk is unknown. Maybe you need to rescan your devices"
 
     groups = uuidMatch.groups()
@@ -68,7 +69,7 @@ def getDiskId(hostname, label):
 def getAttachedDisksForGuest(hostname, guestname):
     # Add the bootable disks
     disks = {}
-    for _,target in config.targets.items():
+    for _,target in g_config['targets'].items():
         for name,disk in target['disks'].items():
             if 'instance' in disk and disk['instance'] == guestname and 'bootOrder' in disk:
                 uuid = getDiskId(hostname, name)
@@ -85,7 +86,7 @@ def getAttachedDisksForGuest(hostname, guestname):
         sortedDisks.append(disk)
 
     # Add the non-bootable disks
-    for _,target in config.targets.items():
+    for _,target in g_config['targets'].items():
         for name,disk in target['disks'].items():
             if 'instance' in disk and disk['instance'] == guestname and not ('bootOrder' in disk):
                 uuid = getDiskId(hostname, name)
@@ -99,7 +100,7 @@ def getAttachedDisksForGuest(hostname, guestname):
     return sortedDisks
 
 def getListOfDefinedGuestsInHost(hostname):
-    assert hostname in config.computeNodes, "Unknown compute node"
+    assert hostname in g_config['computeNodes'], "Unknown compute node"
     proc = subprocess.Popen(['salt',
                              hostname,
                              'cmd.run', 
@@ -114,7 +115,7 @@ def getListOfDefinedGuestsInHost(hostname):
     guests = {} 
 
     for line in lines:
-        match = guest_re.match(line)
+        match = g_guest_re.match(line)
         if match != None:
             groups = match.groups()
             assert len(groups) == 2, "Response text does not have correct number of tokens"
@@ -125,13 +126,13 @@ def getListOfDefinedGuestsInHost(hostname):
             guests[name] = {
                 'host': hostname,
                 'status': status,
-                'title': config.computeInstances[name]['title']
+                'title': g_config['computeInstances'][name]['title']
             }
 
     return guests
 
 def getListOfDefinedGuestsInAllHosts():
-    hosts = config.computeNodes
+    hosts = g_config['computeNodes']
     mergedGuests = {}
 
     for host in hosts:
@@ -154,7 +155,7 @@ def defineVM(hostname, guestname):
     template = env.get_template('vm.xml')
 
     # Render the VM guest description
-    context = copy.deepcopy(config.computeInstances[guestname])
+    context = copy.deepcopy(g_config['computeInstances'][guestname])
     context['name'] = guestname
     context['disks'] = getAttachedDisksForGuest(hostname, guestname)
     xml = template.render(context)
@@ -173,13 +174,19 @@ def undefineVM(hostname, guestname):
     execute_cmd(hostname, ['virsh', 'undefine', guestname])
 
 def main(arg0, argv):
+    global g_config
+
     if len(argv) < 1:
         print_general_usage(arg0)
         exit(1)
 
     cmd = argv[0]
 
-    if cmd == 'list':
+    if cmd == 'init':
+        config.init()
+
+    elif cmd == 'list':
+        g_config = config.get()
         guests = None
 
         if len(argv) >= 2:
@@ -199,6 +206,7 @@ def main(arg0, argv):
             print_define_usage(arg0)
             exit(1)
 
+        g_config = config.get()
         hostname = argv[1]
         guestname = argv[2]
 
@@ -210,6 +218,7 @@ def main(arg0, argv):
             exit(1)
 
         # Undefine the VM on the host machine
+        g_config = config.get()
         hostname = argv[1]
         guestname = argv[2]
         undefineVM(hostname, guestname)
@@ -219,6 +228,7 @@ def main(arg0, argv):
             print_reload_usage(arg0)
             exit(1)
 
+        g_config = config.get()
         guestname = argv[1]
 
         guests = getListOfDefinedGuestsInAllHosts()

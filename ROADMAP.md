@@ -7,7 +7,6 @@ virtual machines. It will also provide for a way to rebalance virtual machines a
 running physical machines and save power.
 
 ## Short-term goals
-- Convert config.py to an YAML file
 - Consolidate pce-compute.py with pce-initiator.py
 - Abstract away iSCSI logic into a different class
 - Provide a way to create volume templates

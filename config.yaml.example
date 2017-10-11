@@ -1,0 +1,180 @@
+computeInstances:
+  guest0:
+    baseMemory: 2048
+    cpuCount: 4
+    maxMemory: 4096
+    networks:
+    - iface: br_dmz
+      mac: null
+    - iface: br_cmz
+      mac: null
+    title: 'Example Machine #1'
+  guest1:
+    baseMemory: 1024
+    cpuCount: 8
+    maxMemory: 1024
+    networks:
+    - iface: br_prod
+      mac: 52:54:00:c2:00:00
+    title: 'Example Machine #2'
+  guest2:
+    baseMemory: 1024
+    cpuCount: 8
+    maxMemory: 1024
+    networks:
+    - iface: br_prod
+      mac: null
+    title: 'Example Machine #3'
+computeNodes:
+- hyper0
+- hyper1
+iface_map:
+  master0:
+    vlan_9000: 192.168.2.1
+  storage0:
+    vlan_san00: 192.168.3.20
+    vlan_san01: 192.168.4.20
+    vlan_san02: 192.168.5.20
+    vlan_san03: 192.168.6.20
+  storage1:
+    vlan_san00: 192.168.3.30
+    vlan_san01: 192.168.4.30
+    vlan_san02: 192.168.5.30
+    vlan_san03: 192.168.6.30
+initiators:
+  hyper0:
+  - in_password: secret4
+    in_userid: secret3
+    iqn: iqn.2005-03.org.open-iscsi:00000000000
+    managed: true
+    password: secret2
+    targets:
+    - hostname: storage0
+      ifaces:
+      - vlan_san00
+      - vlan_san02
+    - hostname: storage1
+      ifaces:
+      - vlan_san00
+      - vlan_san02
+    userid: secret1
+  - in_password: secret12
+    in_userid: secret11
+    iqn: iqn.2005-03.org.open-iscsi:111111111111
+    managed: false
+    password: secret10
+    targets:
+    - hostname: master0
+      ifaces:
+      - vlan1
+    userid: secret9
+  hyper1:
+  - in_password: secret8
+    in_userid: secret7
+    iqn: iqn.2005-03.org.open-iscsi:222222222222
+    managed: true
+    password: secret6
+    targets:
+    - hostname: storage0
+      ifaces:
+      - vlan_san01
+      - vlan_san03
+    - hostname: storage1
+      ifaces:
+      - vlan_san01
+      - vlan_san03
+    userid: secret5
+  - in_password: secret14
+    in_userid: secret13
+    iqn: iqn.2005-03.org.open-iscsi:333333333333
+    managed: false
+    password: secret10
+    targets:
+    - hostname: master0
+      ifaces:
+      - vlan1
+    userid: secret9
+  storage0:
+  - in_password: secret16
+    in_userid: secret15
+    iqn: iqn.2005-03.org.open-iscsi:444444444444
+    managed: false
+    password: secret10
+    targets:
+    - hostname: master0
+      ifaces:
+      - vlan1
+    userid: secret9
+  storage1:
+  - in_password: secret18
+    in_userid: secret17
+    iqn: iqn.2005-03.org.open-iscsi:444444444444
+    managed: false
+    password: secret10
+    targets:
+    - hostname: master0
+      ifaces:
+      - vlan1
+    userid: secret9
+targets:
+  master0:
+    disks:
+      hyper0:
+        size: 12GB
+      hyper1:
+        size: 12GB
+      storage0:
+        size: 12GB
+      storage1:
+        size: 12GB
+    ifaces:
+    - vlan_9000
+    iqn: iqn.2003-01.org.linux-iscsi.master0.x8664:sn.777777777777
+  storage0:
+    backstore_path: /mnt/storage0
+    disks:
+      arch-setup:
+        bootOrder: 0
+        size: 1MB
+        type: disk
+      disk0:
+        bootOrder: 1
+        instance: guest0
+        size: 32GB
+        type: disk
+      disk1:
+        bootOrder: 1
+        instance: guest1
+        size: 10GB
+        type: disk
+      disk2:
+        bootOrder: 1
+        instance: guest2
+        size: 10GB
+        type: disk
+      disk3:
+        instance: guest1
+        size: 200GB
+        type: disk
+      hyper0-swap0:
+        size: 24GB
+        type: disk
+      hyper1-swap0:
+        size: 24GB
+        type: disk
+    ifaces:
+    - vlan_san00
+    - vlan_san01
+    - vlan_san02
+    - vlan_san03
+    iqn: iqn.2003-01.org.linux-iscsi.storage0.x8664:sn.555555555555
+  storage1:
+    backstore_path: /mnt/storage1
+    disks: {}
+    ifaces:
+    - vlan_san00
+    - vlan_san01
+    - vlan_san02
+    - vlan_san03
+    iqn: iqn.2003-01.org.linux-iscsi.storage1.x8664:sn.666666666666
+use_multiple_tpgs: false

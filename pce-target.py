@@ -6,6 +6,8 @@ import socket
 import subprocess
 import sys
 
+g_config = None
+
 def execute_cmd(hostname, argv, show_output=False):
     stdout = None
 
@@ -53,7 +55,7 @@ def print_base_usage(arg0):
 
 def process_base(hostname, sub_cmd):
     target_hostname = get_real_hostname(hostname)
-    target = config.targets[target_hostname]
+    target = g_config['targets'][target_hostname]
     target_iqn = target['iqn']
     target_ifaces = target['ifaces']
 
@@ -64,21 +66,21 @@ def process_base(hostname, sub_cmd):
         lio(hostname, ['target', 'add', target_iqn])
 
         # add TPGs and portals for the target
-        if config.use_multiple_tpgs:
+        if g_config['use_multiple_tpgs']:
             for iface_idx,iface in enumerate(target_ifaces):
                 tpg = iface_idx+1
-                ip = config.iface_map[target_hostname][iface]
+                ip = g_config['iface_map'][target_hostname][iface]
                 lio(hostname, ['tpg', 'add', target_iqn, str(tpg)])
                 lio(hostname, ['portal', 'add', target_iqn, str(tpg), ip])
 
         else:
             lio(hostname, ['tpg', 'add', target_iqn, '1'])
             for iface in target_ifaces:
-                ip = config.iface_map[target_hostname][iface]
+                ip = g_config['iface_map'][target_hostname][iface]
                 lio(hostname, ['portal', 'add', target_iqn, '1', ip])
 
         # add initiators to the TPGs
-        for _,initiator_host in config.initiators.items():
+        for _,initiator_host in g_config['initiators'].items():
             for initiator in initiator_host:
                 should_process_target = False
 
@@ -112,7 +114,7 @@ def print_backstore_usage(arg0):
 
 def process_backstore(hostname, sub_cmd, backstore, size):
     target_hostname = get_real_hostname(hostname)
-    target = config.targets[target_hostname]
+    target = g_config['targets'][target_hostname]
     target_iqn = target['iqn']
     backstore_path = target['backstore_path']
 
@@ -130,7 +132,7 @@ def process_backstore(hostname, sub_cmd, backstore, size):
 
 def process_copy(hostname, old_name, new_name, remove_old):
     target_hostname = get_real_hostname(hostname)
-    target = config.targets[target_hostname]
+    target = g_config['targets'][target_hostname]
     backstore_path = target['backstore_path']
 
     if remove_old:
@@ -148,7 +150,7 @@ def print_lun_usage(arg0):
 
 def process_lun(hostname, sub_cmd, lun, backstore, initiator_iqn, mapped_lun):
     target_hostname = get_real_hostname(hostname)
-    target_iqn = config.targets[target_hostname]['iqn']
+    target_iqn = g_config['targets'][target_hostname]['iqn']
 
     if sub_cmd == 'add':
         ensure_root()
@@ -171,7 +173,7 @@ def print_map_usage(arg0):
 
 def process_map(hostname, dry_run):
     target_hostname = get_real_hostname(hostname)
-    target = config.targets[target_hostname]
+    target = g_config['targets'][target_hostname]
     disks = target['disks']
 
     if disks:
@@ -190,13 +192,18 @@ def print_general_usage(arg0):
     print("    map        update block devices and mapping based on config file")
 
 def main(arg0, argv):
+    global g_config
+
     if len(argv) < 1:
         print_general_usage(arg0)
         exit(1)
 
     cmd = argv[0]
 
-    if cmd == 'base':
+    if cmd == 'init':
+        config.init()
+
+    elif cmd == 'base':
         if len(argv) < 3:
             print_base_usage(arg0)
             exit(1)
@@ -206,6 +213,7 @@ def main(arg0, argv):
             print_base_usage(arg0)
             exit(1)
 
+        g_config = config.get()
         hostname = argv[2]
         process_base(hostname, sub_cmd)
 
@@ -222,6 +230,7 @@ def main(arg0, argv):
                 print_backstore_usage(arg0)
                 exit(1)
 
+            g_config = config.get()
             backstore = argv[3]
             size = argv[4]
             process_backstore(hostname, sub_cmd, backstore, size)
@@ -231,6 +240,7 @@ def main(arg0, argv):
                 print_backstore_usage(arg0)
                 exit(1)
 
+            g_config = config.get()
             backstore = argv[3]
             process_backstore(hostname, sub_cmd, backstore, None)
 
@@ -239,6 +249,7 @@ def main(arg0, argv):
                 print_backstore_usage(arg0)
                 exit(1)
 
+            g_config = config.get()
             old_name = argv[3]
             new_name = argv[4]
             process_copy(hostname, old_name, new_name, True)
@@ -248,6 +259,7 @@ def main(arg0, argv):
                 print_backstore_usage(arg0)
                 exit(1)
 
+            g_config = config.get()
             old_name = argv[3]
             new_name = argv[4]
             process_copy(hostname, old_name, new_name, False)
@@ -261,6 +273,7 @@ def main(arg0, argv):
             print_lun_usage(arg0)
             exit(1)
 
+        g_config = config.get()
         sub_cmd = argv[1]
         hostname = argv[2]
         lun = None
@@ -299,13 +312,13 @@ def main(arg0, argv):
             print_map_usage(arg0)
             exit(1)
 
+        g_config = config.get()
         hostname = argv[1]
         dry_run = argv[2]
         process_map(hostname, dry_run)
 
     else:
         print_general_usage(arg0)
-
 
 if __name__ == "__main__":
     main(sys.argv[0], sys.argv[1::])

@@ -6,6 +6,8 @@ import socket
 import subprocess
 import sys
 
+g_config = None
+
 def execute_cmd(hostname, argv, show_output=False):
     stdout = None
 
@@ -38,7 +40,7 @@ def get_real_hostname(hostname):
 
 def get_allowed_targets(hostname):
     initiator_host = get_real_hostname(hostname)
-    for initiator in config.initiators[initiator_host]:
+    for initiator in g_config['initiators'][initiator_host]:
         if initiator['managed']:
             return initiator['targets']
 
@@ -56,11 +58,11 @@ def process_login(hostname):
     for target in targets:
         target_hostname = target['hostname']
         ifaces = target['ifaces']
-        target_iqn = config.targets[target_hostname]['iqn']
+        target_iqn = g_config['targets'][target_hostname]['iqn']
 
         print("Logging into " + target_hostname)
         for iface in ifaces:
-            ip = config.iface_map[target_hostname][iface]
+            ip = g_config['iface_map'][target_hostname][iface]
 
             execute_cmd(hostname, ['iscsiadm', '-m', 'discovery', '-p', ip, '-o', 'delete'], True)
             execute_cmd(hostname, ['iscsiadm', '-m', 'discovery', '-I', iface, '-p', ip, '-t', 'st'], True)
@@ -77,11 +79,11 @@ def process_logout(hostname):
     for target in targets:
         target_hostname = target['hostname']
         ifaces = target['ifaces']
-        target_iqn = config.targets[target_hostname]['iqn']
+        target_iqn = g_config['targets'][target_hostname]['iqn']
 
         print("Logging out of " + target_hostname)
         for iface in ifaces:
-            ip = config.iface_map[target_hostname][iface]
+            ip = g_config['iface_map'][target_hostname][iface]
             execute_cmd(hostname, ['iscsiadm', '-m', 'node', '-T', target_iqn, '--logout', '-I', iface, '-p', ip])
 
         print("Logged out of " + target_hostname)
@@ -93,6 +95,8 @@ def print_general_usage(arg0):
     print("    rescan     rescan devices")
 
 def main(arg0, argv):
+    global g_config
+
     if len(argv) < 2:
         print_general_usage(arg0)
         exit(1)
@@ -100,18 +104,23 @@ def main(arg0, argv):
     cmd = argv[0]
     hostname = argv[1]
 
-    if cmd == 'login':
+    if cmd == 'init':
+        config.init()
+
+    elif cmd == 'login':
+        g_config = config.get()
         process_login(hostname)
 
     elif cmd == 'logout':
+        g_config = config.get()
         process_logout(hostname)
 
     elif cmd == 'rescan':
+        g_config = config.get()
         process_rescan(hostname)
 
     else:
         print_general_usage(arg0)
-
 
 if __name__ == "__main__":
     main(sys.argv[0], sys.argv[1::])
