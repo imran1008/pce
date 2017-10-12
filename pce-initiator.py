@@ -1,31 +1,14 @@
 #!/bin/python
 
+import sys
+sys.path.append('rpc')
+
+pce_salt = __import__('pce-salt')
 import config
 import os
 import socket
-import subprocess
-import sys
 
 g_config = None
-
-def execute_cmd(hostname, argv, show_output=False):
-    stdout = None
-
-    if not show_output:
-        stdout = open(os.devnull, 'wb')
-
-    if type(argv) is list:
-        if hostname == 'localhost':
-            subprocess.call(argv, stdout=stdout)
-        else:
-            #print("running: " + ' '.join(argv))
-            subprocess.call(['salt', hostname, 'cmd.run', ' '.join(argv)], stdout=stdout)
-    else:
-        if hostname == 'localhost':
-            subprocess.call(argv, shell=True)
-        else:
-            #print("running: " + ' '.join(argv))
-            subprocess.call(['salt', hostname, 'cmd.run', argv], stdout=stdout)
 
 def ensure_root():
     if os.getuid() != 0:
@@ -44,14 +27,14 @@ def get_allowed_targets(hostname):
         if initiator['managed']:
             return initiator['targets']
 
-def process_rescan(hostname):
+def process_rescan(executor, hostname):
     print("Rescanning devices")
-    execute_cmd(hostname, 'find /sys/class/scsi_host/host*/scan | while read line; do echo - - - > $line; done')
-    execute_cmd(hostname, ['iscsiadm', '-m', 'session', '-R'], True)
-    execute_cmd(hostname, ['systemctl', 'restart', 'multipathd'], True)
-    execute_cmd(hostname, ['multipath', '-r'], True)
+    executor.run(hostname, 'find /sys/class/scsi_host/host*/scan | while read line; do echo - - - > $line; done')
+    executor.run(hostname, ['iscsiadm', '-m', 'session', '-R'], True)
+    executor.run(hostname, ['systemctl', 'restart', 'multipathd'], True)
+    executor.run(hostname, ['multipath', '-r'], True)
 
-def process_login(hostname):
+def process_login(executor, hostname):
     ensure_root()
     targets = get_allowed_targets(hostname)
 
@@ -64,15 +47,15 @@ def process_login(hostname):
         for iface in ifaces:
             ip = g_config['iface_map'][target_hostname][iface]
 
-            execute_cmd(hostname, ['iscsiadm', '-m', 'discovery', '-p', ip, '-o', 'delete'], True)
-            execute_cmd(hostname, ['iscsiadm', '-m', 'discovery', '-I', iface, '-p', ip, '-t', 'st'], True)
-            execute_cmd(hostname, ['iscsiadm', '-m', 'node', '-T', target_iqn, '--login', '-I', iface, '-p', ip], True)
+            executor.run(hostname, ['iscsiadm', '-m', 'discovery', '-p', ip, '-o', 'delete'], True)
+            executor.run(hostname, ['iscsiadm', '-m', 'discovery', '-I', iface, '-p', ip, '-t', 'st'], True)
+            executor.run(hostname, ['iscsiadm', '-m', 'node', '-T', target_iqn, '--login', '-I', iface, '-p', ip], True)
 
         print("Logged into " + target_hostname)
 
-    process_rescan(hostname)
+    process_rescan(executor, hostname)
 
-def process_logout(hostname):
+def process_logout(executor, hostname):
     ensure_root()
     targets = get_allowed_targets(hostname)
 
@@ -84,7 +67,7 @@ def process_logout(hostname):
         print("Logging out of " + target_hostname)
         for iface in ifaces:
             ip = g_config['iface_map'][target_hostname][iface]
-            execute_cmd(hostname, ['iscsiadm', '-m', 'node', '-T', target_iqn, '--logout', '-I', iface, '-p', ip])
+            executor.run(hostname, ['iscsiadm', '-m', 'node', '-T', target_iqn, '--logout', '-I', iface, '-p', ip])
 
         print("Logged out of " + target_hostname)
 
@@ -96,6 +79,8 @@ def print_general_usage(arg0):
 
 def main(arg0, argv):
     global g_config
+
+    executor = pce_salt.CommandExecutor()
 
     if len(argv) < 2:
         print_general_usage(arg0)
@@ -109,15 +94,15 @@ def main(arg0, argv):
 
     elif cmd == 'login':
         g_config = config.get()
-        process_login(hostname)
+        process_login(executor, hostname)
 
     elif cmd == 'logout':
         g_config = config.get()
-        process_logout(hostname)
+        process_logout(executor, hostname)
 
     elif cmd == 'rescan':
         g_config = config.get()
-        process_rescan(hostname)
+        process_rescan(executor, hostname)
 
     else:
         print_general_usage(arg0)

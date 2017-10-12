@@ -1,23 +1,20 @@
 #!/bin/python
 
+import sys
+sys.path.append('rpc')
+
+pce_salt = __import__('pce-salt')
+
 import config
 import copy
 import jinja2
 import os
 import re
-import subprocess
-import sys
 import tempfile
 
 g_uuid_re = re.compile('(.*):\n    ([a-zA-Z0-9]+) dm-\d+ LIO-ORG,(.*)$')
 g_guest_re = re.compile('^     [^ ]+\s+([^ ]+)\s+(.*)$')
 g_config = None
-
-def execute_cmd(hostname, argv):
-    subprocess.call(['salt', hostname, 'cmd.run', ' '.join(argv)])
-
-def send_file(hostname, src, dest):
-    subprocess.call(['salt-cp', hostname, src, dest])
 
 def print_general_usage(arg0):
     print("usage: " + arg0 + " <command>")
@@ -35,19 +32,10 @@ def print_undefine_usage(arg0):
 def print_reload_usage(arg0):
     print("usage: " + arg0 + " reload <guest>")
 
-def getDiskId(hostname, label):
+def getDiskId(executor, hostname, label):
     print("Looking up UUID for disk " + label)
-    proc = subprocess.Popen(['salt',
-                             hostname,
-                             'cmd.run', 
-                             'multipath -l | grep "LIO-ORG,' + label +'$"'
-                            ],
-                            stdout=subprocess.PIPE)
+    output = executor.run(hostname, 'multipath -l | grep "LIO-ORG,' + label +'$"')
 
-    stdout = proc.communicate()
-    assert len(stdout) == 2, "Invalid response from Popen"
-
-    output = stdout[0].decode('utf-8')
     uuidMatch = g_uuid_re.match(output)
     assert uuidMatch != None, "Disk is unknown. Maybe you need to rescan your devices"
 
@@ -66,13 +54,13 @@ def getDiskId(hostname, label):
 
     return responseUUID
 
-def getAttachedDisksForGuest(hostname, guestname):
+def getAttachedDisksForGuest(executor, hostname, guestname):
     # Add the bootable disks
     disks = {}
     for _,target in g_config['targets'].items():
         for name,disk in target['disks'].items():
             if 'instance' in disk and disk['instance'] == guestname and 'bootOrder' in disk:
-                uuid = getDiskId(hostname, name)
+                uuid = getDiskId(executor, hostname, name)
                 bootOrder = disk['bootOrder']
 
                 disks[bootOrder] = {
@@ -89,7 +77,7 @@ def getAttachedDisksForGuest(hostname, guestname):
     for _,target in g_config['targets'].items():
         for name,disk in target['disks'].items():
             if 'instance' in disk and disk['instance'] == guestname and not ('bootOrder' in disk):
-                uuid = getDiskId(hostname, name)
+                uuid = getDiskId(executor, hostname, name)
 
                 sortedDisks.append({
                     'uuid': uuid,
@@ -99,19 +87,11 @@ def getAttachedDisksForGuest(hostname, guestname):
 
     return sortedDisks
 
-def getListOfDefinedGuestsInHost(hostname):
+def getListOfDefinedGuestsInHost(executor, hostname):
     assert hostname in g_config['computeNodes'], "Unknown compute node"
-    proc = subprocess.Popen(['salt',
-                             hostname,
-                             'cmd.run', 
-                             'virsh list --all'
-                            ],
-                            stdout=subprocess.PIPE)
 
-    stdout = proc.communicate()
-    assert len(stdout) == 2, "Invalid response from Popen"
-
-    lines = stdout[0].decode('utf-8').split('\n')[2:]
+    output = executor.run(hostname, 'virsh list --all')
+    lines = output.split('\n')[2:]
     guests = {} 
 
     for line in lines:
@@ -131,12 +111,12 @@ def getListOfDefinedGuestsInHost(hostname):
 
     return guests
 
-def getListOfDefinedGuestsInAllHosts():
+def getListOfDefinedGuestsInAllHosts(executor):
     hosts = g_config['computeNodes']
     mergedGuests = {}
 
     for host in hosts:
-        guests = getListOfDefinedGuestsInHost(host)
+        guests = getListOfDefinedGuestsInHost(executor, host)
 
         # Make sure the guest list isn't already in the mergedGuest list
         for name,guest in guests.items():
@@ -145,9 +125,9 @@ def getListOfDefinedGuestsInAllHosts():
 
     return mergedGuests
 
-def defineVM(hostname, guestname):
+def defineVM(executor, hostname, guestname):
     # Make sure guest isn't already defined
-    guests = getListOfDefinedGuestsInAllHosts()
+    guests = getListOfDefinedGuestsInAllHosts(executor)
     assert not guestname in guests, "Guest is already defined"
 
     # Load the template
@@ -157,24 +137,26 @@ def defineVM(hostname, guestname):
     # Render the VM guest description
     context = copy.deepcopy(g_config['computeInstances'][guestname])
     context['name'] = guestname
-    context['disks'] = getAttachedDisksForGuest(hostname, guestname)
+    context['disks'] = getAttachedDisksForGuest(executor, hostname, guestname)
     xml = template.render(context)
 
     # Send it to the VM host machine
     f = tempfile.NamedTemporaryFile(delete=False)
     f.write(str.encode(xml))
     f.close()
-    send_file(hostname, f.name, '/tmp/vm.xml')
+    executor.send_file(hostname, f.name, '/tmp/vm.xml')
     os.unlink(f.name)
 
     # Define the VM on the host machine
-    execute_cmd(hostname, ['virsh', 'define', '/tmp/vm.xml'])
+    executor.run(hostname, ['virsh', 'define', '/tmp/vm.xml'])
 
-def undefineVM(hostname, guestname):
-    execute_cmd(hostname, ['virsh', 'undefine', guestname])
+def undefineVM(executor, hostname, guestname):
+    executor.cmd(hostname, ['virsh', 'undefine', guestname])
 
 def main(arg0, argv):
     global g_config
+
+    executor = pce_salt.CommandExecutor()
 
     if len(argv) < 1:
         print_general_usage(arg0)
@@ -191,9 +173,9 @@ def main(arg0, argv):
 
         if len(argv) >= 2:
             hostname = argv[1]
-            guests = getListOfDefinedGuestsInHost(hostname)
+            guests = getListOfDefinedGuestsInHost(executor, hostname)
         else:
-            guests = getListOfDefinedGuestsInAllHosts()
+            guests = getListOfDefinedGuestsInAllHosts(executor)
 
         for name,guest in guests.items():
             print('name: ' + name.ljust(8) + '\t' + 
@@ -210,7 +192,7 @@ def main(arg0, argv):
         hostname = argv[1]
         guestname = argv[2]
 
-        defineVM(hostname, guestname)
+        defineVM(executor, hostname, guestname)
 
     elif cmd == 'undefine':
         if len(argv) < 2:
@@ -221,7 +203,7 @@ def main(arg0, argv):
         g_config = config.get()
         hostname = argv[1]
         guestname = argv[2]
-        undefineVM(hostname, guestname)
+        undefineVM(executor, hostname, guestname)
 
     elif cmd == 'reload':
         if len(argv) < 2:
@@ -231,15 +213,15 @@ def main(arg0, argv):
         g_config = config.get()
         guestname = argv[1]
 
-        guests = getListOfDefinedGuestsInAllHosts()
+        guests = getListOfDefinedGuestsInAllHosts(executor)
         assert guestname in guests, "Guest is not defined"
         guest = guests[guestname]
 
         assert guest['status'] == 'shut off', "Guest is not turned off!"
 
         hostname = guest['host']
-        undefineVM(hostname, guestname)
-        defineVM(hostname, guestname)
+        undefineVM(executor, hostname, guestname)
+        defineVM(executor, hostname, guestname)
 
     else:
         print_general_usage(arg0)

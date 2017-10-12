@@ -8,7 +8,6 @@ running physical machines and save power.
 
 ## Short-term goals
 - Consolidate pce-compute.py with pce-initiator.py
-- Abstract away remote command execution logic
 - Abstract away iSCSI logic into a different class
 - Provide a way to create volume templates
 - Provide a way to create volume from templates

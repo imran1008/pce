@@ -16,7 +16,7 @@ Salt-master running on it.
 
 ### Software requirements
  - GNU/Linux
- - Python 3
+ - Python 3.5+
  - Saltstack
 
 ## Storage machines
@@ -29,7 +29,7 @@ The storage machines will provide virtual block storage for virtual machines.
 
 ### Software requirements
  - GNU/Linux
- - Python 3
+ - Python 3.5+
  - Saltstack
  - TargetCLI
  - BTRFS
@@ -47,7 +47,7 @@ for the virtual machines.
 
 ### Software requirements
  - GNU/Linux
- - Python 3
+ - Python 3.5+
  - Saltstack
  - Open-iSCSI
  - libvirt
